@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<!-- saved from url=(0087)https://page.genspark.site/page/toolu_013r3pikEDKLyceAzXJBmpqP/ntrip_monitor_final.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NTRIP CORS Station Monitor</title>
+    <link rel="stylesheet" href="./index_files/tailwind.min.css">
+    <link rel="stylesheet" href="./index_files/leaflet.css">
+    <link rel="stylesheet" href="./index_files/all.min.css">
+    <style>
+        .status-badge {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .status-online {
+            background-color: #10B981;
+        }
+        .status-offline {
+            background-color: #EF4444;
+        }
+        .status-unknown {
+            background-color: #9CA3AF;
+        }
+        .uptime-high {
+            color: #10B981;
+        }
+        .uptime-medium {
+            color: #F59E0B;
+        }
+        .uptime-low {
+            color: #EF4444;
+        }
+        #map {
+            height: calc(100vh - 160px);
+            width: 100%;
+            border-radius: 0.5rem;
+        }
+        .station-card {
+            transition: transform 0.2s ease-in-out;
+        }
+        .station-card:hover {
+            transform: translateY(-2px);
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #3B82F6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .leaflet-popup-content {
+            min-width: 200px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen dark">
+    <!-- Header -->
+    <header class="bg-white shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <h1 class="text-xl font-bold text-gray-900">NTRIP CORS Station Monitor</h1>
+            <div class="flex items-center space-x-4">
+                <button id="refresh-stations" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-sync-alt mr-2"></i> Check All
+                </button>
+                <button id="add-station-btn" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-plus mr-2"></i> Add Station
+                </button>
+                <button id="settings-btn" class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <i class="fas fa-cog mr-2"></i> Settings
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- View toggles -->
+        <div class="mb-6 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <button id="card-view-btn" class="px-4 py-2 font-medium text-sm rounded-md bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                    <i class="fas fa-th mr-2"></i> Card View
+                </button>
+                <button id="map-view-btn" class="px-4 py-2 font-medium text-sm rounded-md bg-white text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                    <i class="fas fa-map-marked-alt mr-2"></i> Map View
+                </button>
+            </div>
+            <div class="text-sm text-gray-500" id="last-update">Last update: 10:04:51</div>
+        </div>
+
+        <!-- Loading indicator -->
+        <div id="loading-container" class="flex justify-center items-center py-20" style="display: none;">
+            <div class="flex flex-col items-center">
+                <div class="loading-spinner mb-4"></div>
+                <p class="text-gray-600">Loading stations...</p>
+            </div>
+        </div>
+
+        <!-- Card view -->
+        <div id="card-view" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6" style="display: grid;"><div class="station-card bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">EYD</h3>
+                            <p class="text-sm text-gray-500">EYD</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="edit-station text-gray-400 hover:text-gray-500" data-station="EYD">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-station text-gray-400 hover:text-red-500" data-station="EYD">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="status-badge status-offline"></span>
+                            <span class="text-sm font-medium text-red-700">
+                                Offline
+                            </span>
+                        </div>
+                        <div class="text-sm uptime-low font-medium">
+                            Uptime: 60%
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                        <div>Last check: 10:04:51</div>
+                        <div>Format: N/A</div>
+                        <div>Location: 2.2300, 73.0300</div>
+                        <div>Network: N/A</div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button class="check-station w-full px-3 py-1.5 text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none" data-station="EYD">
+                            <i class="fas fa-sync-alt mr-1"></i> Check Status
+                        </button>
+                    </div>
+                </div>
+            </div><div class="station-card bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">HMLE</h3>
+                            <p class="text-sm text-gray-500">HMLE</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="edit-station text-gray-400 hover:text-gray-500" data-station="HMLE">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-station text-gray-400 hover:text-red-500" data-station="HMLE">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="status-badge status-offline"></span>
+                            <span class="text-sm font-medium text-red-700">
+                                Offline
+                            </span>
+                        </div>
+                        <div class="text-sm uptime-medium font-medium">
+                            Uptime: 70%
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                        <div>Last check: 10:04:51</div>
+                        <div>Format: N/A</div>
+                        <div>Location: 6.7833, 73.1667</div>
+                        <div>Network: N/A</div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button class="check-station w-full px-3 py-1.5 text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none" data-station="HMLE">
+                            <i class="fas fa-sync-alt mr-1"></i> Check Status
+                        </button>
+                    </div>
+                </div>
+            </div><div class="station-card bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">MAD</h3>
+                            <p class="text-sm text-gray-500">MAD</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="edit-station text-gray-400 hover:text-gray-500" data-station="MAD">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-station text-gray-400 hover:text-red-500" data-station="MAD">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="status-badge status-online"></span>
+                            <span class="text-sm font-medium text-green-700">
+                                Online
+                            </span>
+                        </div>
+                        <div class="text-sm uptime-medium font-medium">
+                            Uptime: 80%
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                        <div>Last check: 10:04:51</div>
+                        <div>Format: N/A</div>
+                        <div>Location: 3.2800, 73.0100</div>
+                        <div>Network: N/A</div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button class="check-station w-full px-3 py-1.5 text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none" data-station="MAD">
+                            <i class="fas fa-sync-alt mr-1"></i> Check Status
+                        </button>
+                    </div>
+                </div>
+            </div><div class="station-card bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">MLE</h3>
+                            <p class="text-sm text-gray-500">MLE</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="edit-station text-gray-400 hover:text-gray-500" data-station="MLE">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-station text-gray-400 hover:text-red-500" data-station="MLE">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="status-badge status-offline"></span>
+                            <span class="text-sm font-medium text-red-700">
+                                Offline
+                            </span>
+                        </div>
+                        <div class="text-sm uptime-low font-medium">
+                            Uptime: 55%
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                        <div>Last check: 10:04:51</div>
+                        <div>Format: N/A</div>
+                        <div>Location: 4.1755, 73.5093</div>
+                        <div>Network: N/A</div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button class="check-station w-full px-3 py-1.5 text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none" data-station="MLE">
+                            <i class="fas fa-sync-alt mr-1"></i> Check Status
+                        </button>
+                    </div>
+                </div>
+            </div><div class="station-card bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">RYNAN Base</h3>
+                            <p class="text-sm text-gray-500">RYNAN_Base</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="edit-station text-gray-400 hover:text-gray-500" data-station="RYNAN_Base">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-station text-gray-400 hover:text-red-500" data-station="RYNAN_Base">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="status-badge status-online"></span>
+                            <span class="text-sm font-medium text-green-700">
+                                Online
+                            </span>
+                        </div>
+                        <div class="text-sm uptime-low font-medium">
+                            Uptime: 55%
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                        <div>Last check: 10:04:51</div>
+                        <div>Format: 6122R05045</div>
+                        <div>Location: 4.1700, 73.4900</div>
+                        <div>Network: GNSS</div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button class="check-station w-full px-3 py-1.5 text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none" data-station="RYNAN_Base">
+                            <i class="fas fa-sync-alt mr-1"></i> Check Status
+                        </button>
+                    </div>
+                </div>
+            </div><div class="station-card bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">smc01</h3>
+                            <p class="text-sm text-gray-500">smc01</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="edit-station text-gray-400 hover:text-gray-500" data-station="smc01">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-station text-gray-400 hover:text-red-500" data-station="smc01">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="status-badge status-online"></span>
+                            <span class="text-sm font-medium text-green-700">
+                                Online
+                            </span>
+                        </div>
+                        <div class="text-sm uptime-low font-medium">
+                            Uptime: 65%
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                        <div>Last check: 10:04:51</div>
+                        <div>Format: N/A</div>
+                        <div>Location: 4.1650, 73.5150</div>
+                        <div>Network: N/A</div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button class="check-station w-full px-3 py-1.5 text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none" data-station="smc01">
+                            <i class="fas fa-sync-alt mr-1"></i> Check Status
+                        </button>
+                    </div>
+                </div>
+            </div><div class="station-card bg-white shadow rounded-lg overflow-hidden">
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">SUN</h3>
+                            <p class="text-sm text-gray-500">SUN</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="edit-station text-gray-400 hover:text-gray-500" data-station="SUN">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-station text-gray-400 hover:text-red-500" data-station="SUN">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="status-badge status-online"></span>
+                            <span class="text-sm font-medium text-green-700">
+                                Online
+                            </span>
+                        </div>
+                        <div class="text-sm uptime-medium font-medium">
+                            Uptime: 70%
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                        <div>Last check: 10:04:51</div>
+                        <div>Format: N/A</div>
+                        <div>Location: 3.8500, 73.5500</div>
+                        <div>Network: N/A</div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button class="check-station w-full px-3 py-1.5 text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none" data-station="SUN">
+                            <i class="fas fa-sync-alt mr-1"></i> Check Status
+                        </button>
+                    </div>
+                </div>
+            </div></div>
+
+        <!-- Map view -->
+        <div id="map-view" style="display: none;">
+            <div id="map" class="leaflet-container leaflet-touch leaflet-retina leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" tabindex="0" style="position: relative;"><div class="leaflet-pane leaflet-map-pane" style="transform: translate3d(0px, 0px, 0px);"><div class="leaflet-pane leaflet-tile-pane"><div class="leaflet-layer " style="z-index: 1; opacity: 1;"><div class="leaflet-tile-container leaflet-zoom-animated" style="z-index: 18; transform: translate3d(0px, 0px, 0px) scale(1);"><img alt="" role="presentation" src="./index_files/125.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-70px, -7px, 0px); opacity: 1;"></div></div></div><div class="leaflet-pane leaflet-shadow-pane"><img src="./index_files/marker-shadow.png" class="leaflet-marker-shadow leaflet-zoom-animated" alt="" style="margin-left: -12px; margin-top: -41px; width: 41px; height: 41px; transform: translate3d(-87px, 355px, 0px);"><img src="./index_files/marker-shadow.png" class="leaflet-marker-shadow leaflet-zoom-animated" alt="" style="margin-left: -12px; margin-top: -41px; width: 41px; height: 41px; transform: translate3d(1px, 2px, 0px);"><img src="./index_files/marker-shadow.png" class="leaflet-marker-shadow leaflet-zoom-animated" alt="" style="margin-left: -12px; margin-top: -41px; width: 41px; height: 41px; transform: translate3d(0px, 0px, 0px);"><img src="./index_files/marker-shadow.png" class="leaflet-marker-shadow leaflet-zoom-animated" alt="" style="margin-left: -12px; margin-top: -41px; width: 41px; height: 41px; transform: translate3d(-4px, 1px, 0px);"><img src="./index_files/marker-shadow.png" class="leaflet-marker-shadow leaflet-zoom-animated" alt="" style="margin-left: -12px; margin-top: -41px; width: 41px; height: 41px; transform: translate3d(7px, 60px, 0px);"><img src="./index_files/marker-shadow.png" class="leaflet-marker-shadow leaflet-zoom-animated" alt="" style="margin-left: -12px; margin-top: -41px; width: 41px; height: 41px; transform: translate3d(-62px, -477px, 0px);"><img src="./index_files/marker-shadow.png" class="leaflet-marker-shadow leaflet-zoom-animated" alt="" style="margin-left: -12px; margin-top: -41px; width: 41px; height: 41px; transform: translate3d(-91px, 164px, 0px);"></div><div class="leaflet-pane leaflet-overlay-pane"></div><div class="leaflet-pane leaflet-marker-pane"><img src="./index_files/marker-icon-2x.png" class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" alt="" tabindex="0" style="margin-left: -12px; margin-top: -41px; width: 25px; height: 41px; transform: translate3d(-87px, 355px, 0px); z-index: 355;"><img src="./index_files/marker-icon-2x.png" class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" alt="" tabindex="0" style="margin-left: -12px; margin-top: -41px; width: 25px; height: 41px; transform: translate3d(1px, 2px, 0px); z-index: 2;"><img src="./index_files/marker-icon-2x.png" class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" alt="" tabindex="0" style="margin-left: -12px; margin-top: -41px; width: 25px; height: 41px; transform: translate3d(0px, 0px, 0px); z-index: 0;"><img src="./index_files/marker-icon-2x.png" class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" alt="" tabindex="0" style="margin-left: -12px; margin-top: -41px; width: 25px; height: 41px; transform: translate3d(-4px, 1px, 0px); z-index: 1;"><img src="./index_files/marker-icon-2x.png" class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" alt="" tabindex="0" style="margin-left: -12px; margin-top: -41px; width: 25px; height: 41px; transform: translate3d(7px, 60px, 0px); z-index: 60;"><img src="./index_files/marker-icon-2x.png" class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" alt="" tabindex="0" style="margin-left: -12px; margin-top: -41px; width: 25px; height: 41px; transform: translate3d(-62px, -477px, 0px); z-index: -477;"><img src="./index_files/marker-icon-2x.png" class="leaflet-marker-icon leaflet-zoom-animated leaflet-interactive" alt="" tabindex="0" style="margin-left: -12px; margin-top: -41px; width: 25px; height: 41px; transform: translate3d(-91px, 164px, 0px); z-index: 164;"></div><div class="leaflet-pane leaflet-tooltip-pane"></div><div class="leaflet-pane leaflet-popup-pane"></div><div class="leaflet-proxy leaflet-zoom-animated" style="transform: translate3d(46150px, 32007.2px, 0px) scale(128);"></div></div><div class="leaflet-control-container"><div class="leaflet-top leaflet-left"><div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="https://page.genspark.site/page/toolu_013r3pikEDKLyceAzXJBmpqP/ntrip_monitor_final.html#" title="Zoom in" role="button" aria-label="Zoom in">+</a><a class="leaflet-control-zoom-out" href="https://page.genspark.site/page/toolu_013r3pikEDKLyceAzXJBmpqP/ntrip_monitor_final.html#" title="Zoom out" role="button" aria-label="Zoom out">−</a></div></div><div class="leaflet-top leaflet-right"></div><div class="leaflet-bottom leaflet-left"></div><div class="leaflet-bottom leaflet-right"><div class="leaflet-control-attribution leaflet-control"><a href="https://leafletjs.com/" title="A JS library for interactive maps">Leaflet</a> | © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</div></div></div></div>
+        </div>
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50" style="display: none;">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-medium text-gray-900">Settings</h3>
+                    <button id="close-settings" class="text-gray-400 hover:text-gray-500">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="px-6 py-4">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Update Interval</label>
+                    <select id="update-interval" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                        <option value="10000">10 seconds</option>
+                        <option value="30000" selected="">30 seconds</option>
+                        <option value="60000">1 minute</option>
+                        <option value="300000">5 minutes</option>
+                    </select>
+                </div>
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Theme</label>
+                    <select id="theme-select" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md">
+                        <option value="light" selected="">Light</option>
+                        <option value="dark">Dark</option>
+                    </select>
+                </div>
+                <div class="mt-6">
+                    <button id="clear-data-btn" class="w-full px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                        Clear All Station Data
+                    </button>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 text-right rounded-b-lg">
+                <button id="save-settings" class="px-4 py-2 bg-indigo-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Station Modal -->
+    <div id="station-modal" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50" style="display: none;">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex items-center justify-between">
+                    <h3 id="station-modal-title" class="text-lg font-medium text-gray-900">Add Station</h3>
+                    <button id="close-station-modal" class="text-gray-400 hover:text-gray-500">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="px-6 py-4">
+                <input type="hidden" id="station-id-hidden">
+                <div class="mb-4">
+                    <label for="station-id" class="block text-sm font-medium text-gray-700 mb-1">Station ID</label>
+                    <input type="text" id="station-id" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Station ID (required)">
+                </div>
+                <div class="mb-4">
+                    <label for="station-name" class="block text-sm font-medium text-gray-700 mb-1">Display Name</label>
+                    <input type="text" id="station-name" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Display Name (optional)">
+                </div>
+                
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                    <div class="flex space-x-2 mb-2">
+                        <div class="w-1/2">
+                            <input type="text" id="station-lat" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Latitude">
+                        </div>
+                        <div class="w-1/2">
+                            <input type="text" id="station-lng" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="Longitude">
+                        </div>
+                    </div>
+                    <div class="mt-2 h-40 w-full rounded-md overflow-hidden border border-gray-300">
+                        <div id="location-picker-map" class="h-full w-full leaflet-container leaflet-touch leaflet-retina leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom" tabindex="0" style="position: relative;"><div class="leaflet-pane leaflet-map-pane" style="transform: translate3d(0px, 0px, 0px);"><div class="leaflet-pane leaflet-tile-pane"><div class="leaflet-layer " style="z-index: 1; opacity: 1;"><div class="leaflet-tile-container leaflet-zoom-animated" style="z-index: 18; transform: translate3d(0px, 0px, 0px) scale(1);"><img alt="" role="presentation" src="./index_files/125.png" class="leaflet-tile leaflet-tile-loaded" style="width: 256px; height: 256px; transform: translate3d(-70px, -7px, 0px); opacity: 1;"></div></div></div><div class="leaflet-pane leaflet-shadow-pane"></div><div class="leaflet-pane leaflet-overlay-pane"></div><div class="leaflet-pane leaflet-marker-pane"></div><div class="leaflet-pane leaflet-tooltip-pane"></div><div class="leaflet-pane leaflet-popup-pane"></div><div class="leaflet-proxy leaflet-zoom-animated" style="transform: translate3d(46150px, 32007.2px, 0px) scale(128);"></div></div><div class="leaflet-control-container"><div class="leaflet-top leaflet-left"><div class="leaflet-control-zoom leaflet-bar leaflet-control"><a class="leaflet-control-zoom-in" href="https://page.genspark.site/page/toolu_013r3pikEDKLyceAzXJBmpqP/ntrip_monitor_final.html#" title="Zoom in" role="button" aria-label="Zoom in">+</a><a class="leaflet-control-zoom-out" href="https://page.genspark.site/page/toolu_013r3pikEDKLyceAzXJBmpqP/ntrip_monitor_final.html#" title="Zoom out" role="button" aria-label="Zoom out">−</a></div></div><div class="leaflet-top leaflet-right"></div><div class="leaflet-bottom leaflet-left"></div><div class="leaflet-bottom leaflet-right"><div class="leaflet-control-attribution leaflet-control"><a href="https://leafletjs.com/" title="A JS library for interactive maps">Leaflet</a> | © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors</div></div></div></div>
+                    </div>
+                    <p class="mt-1 text-sm text-gray-500">Click on the map to set the location or enter coordinates manually</p>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-gray-50 text-right rounded-b-lg">
+                <button id="save-station" class="px-4 py-2 bg-indigo-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Save Station
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed right-5 bottom-5 px-4 py-2 bg-gray-900 text-white rounded-md shadow-lg transform transition-all duration-300 z-50 opacity-0 translate-y-2" style="pointer-events: none;">
+        <span id="toast-message">All stations checked</span>
+    </div>
+
+    <!-- Scripts -->
+    <script src="./index_files/leaflet.js"></script>
+    <script src="./index_files/js.cookie.min.js"></script>
+    <script>
+        // Constants
+        const API_URL = 'https://asia-southeast1-cors-428306.cloudfunctions.net/getNtripData';
+        const DEFAULT_UPDATE_INTERVAL = 30000; // 30 seconds
+        const DEFAULT_COORDINATES = {
+            // Default coordinates for known stations
+            'MLE': { lat: 4.1755, lng: 73.5093 },
+            'HMLE': { lat: 6.7833, lng: 73.1667 },
+            'OORR': { lat: 5.2169, lng: 73.1359 },
+            'MAD': { lat: 3.2800, lng: 73.0100 },
+            'SUN': { lat: 3.8500, lng: 73.5500 },
+            'EYD': { lat: 2.2300, lng: 73.0300 },
+            'RYNAN_Base': { lat: 4.1700, lng: 73.4900 },
+            'smc01': { lat: 4.1650, lng: 73.5150 }
+        };
+        const DEFAULT_CENTER = { lat: 4.1755, lng: 73.5093 }; // Maldives area
+        
+        // Global variables
+        let stations = [];
+        let map, locationPickerMap, locationMarker;
+        let updateInterval = DEFAULT_UPDATE_INTERVAL;
+        let updateTimer;
+        let editingStationId = null;
+        
+        // DOM Elements
+        const cardViewBtn = document.getElementById('card-view-btn');
+        const mapViewBtn = document.getElementById('map-view-btn');
+        const cardView = document.getElementById('card-view');
+        const mapView = document.getElementById('map-view');
+        const loadingContainer = document.getElementById('loading-container');
+        const refreshStationsBtn = document.getElementById('refresh-stations');
+        const lastUpdateEl = document.getElementById('last-update');
+        const addStationBtn = document.getElementById('add-station-btn');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsModal = document.getElementById('settings-modal');
+        const closeSettingsBtn = document.getElementById('close-settings');
+        const saveSettingsBtn = document.getElementById('save-settings');
+        const stationModal = document.getElementById('station-modal');
+        const closeStationModalBtn = document.getElementById('close-station-modal');
+        const saveStationBtn = document.getElementById('save-station');
+        const clearDataBtn = document.getElementById('clear-data-btn');
+        const updateIntervalSelect = document.getElementById('update-interval');
+        const themeSelect = document.getElementById('theme-select');
+        
+        // Initialize the dashboard
+        document.addEventListener('DOMContentLoaded', async () => {
+            initSettings();
+            initMap();
+            await loadStations();
+            setupEventListeners();
+            startUpdateTimer();
+            showCardView(); // Start with card view
+        });
+        
+        // Initialize settings from cookies
+        function initSettings() {
+            // Get update interval setting
+            const savedInterval = Cookies.get('updateInterval');
+            if (savedInterval) {
+                updateInterval = parseInt(savedInterval, 10);
+                updateIntervalSelect.value = updateInterval;
+            }
+            
+            // Get theme setting
+            const savedTheme = Cookies.get('theme');
+            if (savedTheme) {
+                themeSelect.value = savedTheme;
+                applyTheme(savedTheme);
+            }
+        }
+        
+        // Apply theme
+        function applyTheme(theme) {
+            if (theme === 'dark') {
+                document.body.classList.add('dark');
+                // Add dark mode styles here
+            } else {
+                document.body.classList.remove('dark');
+            }
+        }
+        
+        // Initialize the main map
+        function initMap() {
+            // Initialize main map
+            map = L.map('map').setView([DEFAULT_CENTER.lat, DEFAULT_CENTER.lng], 8);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            // Initialize location picker map
+            locationPickerMap = L.map('location-picker-map').setView([DEFAULT_CENTER.lat, DEFAULT_CENTER.lng], 8);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(locationPickerMap);
+            
+            // Setup location picker click handler
+            locationPickerMap.on('click', function(e) {
+                const lat = e.latlng.lat.toFixed(6);
+                const lng = e.latlng.lng.toFixed(6);
+                
+                document.getElementById('station-lat').value = lat;
+                document.getElementById('station-lng').value = lng;
+                
+                if (locationMarker) {
+                    locationMarker.setLatLng(e.latlng);
+                } else {
+                    locationMarker = L.marker(e.latlng).addTo(locationPickerMap);
+                }
+                
+                showToast(`Location set to ${lat}, ${lng}`);
+            });
+        }
+        
+        // Load stations from cloud function and cookies
+        async function loadStations() {
+            try {
+                // Show loading indicator
+                loadingContainer.style.display = 'flex';
+                cardView.style.display = 'none';
+                mapView.style.display = 'none';
+                
+                // Load stations from API
+                const response = await fetch(API_URL);
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                
+                const apiStations = await response.json();
+                
+                // Load saved station data (coords and history) from cookies
+                const savedStationsJson = Cookies.get('stations');
+                const savedStations = savedStationsJson ? JSON.parse(savedStationsJson) : {};
+                
+                // Process API stations
+                stations = apiStations.map(apiStation => {
+                    const stationId = apiStation.name;
+                    const savedStation = savedStations[stationId] || {};
+                    
+                    // Determine coordinates
+                    let lat = savedStation.lat;
+                    let lng = savedStation.lng;
+                    
+                    // If no saved coordinates, use defaults if available
+                    if ((!lat || !lng) && DEFAULT_COORDINATES[stationId]) {
+                        lat = DEFAULT_COORDINATES[stationId].lat;
+                        lng = DEFAULT_COORDINATES[stationId].lng;
+                    }
+                    
+                    return {
+                        id: stationId,
+                        name: formatStationName(stationId),
+                        status: 'unknown',
+                        lastUpdate: null,
+                        lat: lat,
+                        lng: lng,
+                        format: apiStation.format,
+                        navSystem: apiStation.navSystem,
+                        network: apiStation.network,
+                        country: apiStation.country,
+                        uptime: savedStation.uptime || 0,
+                        statusHistory: savedStation.statusHistory || []
+                    };
+                });
+                
+                // Update UI
+                renderStations();
+                checkAllStationsStatus();
+            } catch (error) {
+                console.error('Error loading stations:', error);
+                showToast('Error loading stations: ' + error.message, 'error');
+                loadingContainer.style.display = 'none';
+            }
+        }
+        
+        // Format station name for display
+        function formatStationName(stationId) {
+            return stationId.replace(/_/g, ' ');
+        }
+        
+        // Set up event listeners
+        function setupEventListeners() {
+            // View toggles
+            cardViewBtn.addEventListener('click', showCardView);
+            mapViewBtn.addEventListener('click', showMapView);
+            
+            // Refresh button
+            refreshStationsBtn.addEventListener('click', checkAllStationsStatus);
+            
+            // Add station button
+            addStationBtn.addEventListener('click', showAddStationModal);
+            
+            // Settings button
+            settingsBtn.addEventListener('click', () => {
+                settingsModal.style.display = 'flex';
+            });
+            
+            // Close settings
+            closeSettingsBtn.addEventListener('click', () => {
+                settingsModal.style.display = 'none';
+            });
+            
+            // Save settings
+            saveSettingsBtn.addEventListener('click', saveSettings);
+            
+            // Close station modal
+            closeStationModalBtn.addEventListener('click', () => {
+                stationModal.style.display = 'none';
+                editingStationId = null;
+                if (locationMarker) {
+                    locationPickerMap.removeLayer(locationMarker);
+                    locationMarker = null;
+                }
+            });
+            
+            // Save station
+            saveStationBtn.addEventListener('click', saveStation);
+            
+            // Clear data
+            clearDataBtn.addEventListener('click', clearAllData);
+            
+            // Close modals on outside click
+            window.addEventListener('click', (e) => {
+                if (e.target === settingsModal) {
+                    settingsModal.style.display = 'none';
+                }
+                if (e.target === stationModal) {
+                    stationModal.style.display = 'none';
+                    editingStationId = null;
+                    if (locationMarker) {
+                        locationPickerMap.removeLayer(locationMarker);
+                        locationMarker = null;
+                    }
+                }
+            });
+        }
+        
+        // Save settings
+        function saveSettings() {
+            // Save update interval
+            const newInterval = parseInt(updateIntervalSelect.value, 10);
+            updateInterval = newInterval;
+            Cookies.set('updateInterval', newInterval, { expires: 365 });
+            
+            // Save theme
+            const theme = themeSelect.value;
+            Cookies.set('theme', theme, { expires: 365 });
+            applyTheme(theme);
+            
+            // Restart update timer with new interval
+            clearInterval(updateTimer);
+            startUpdateTimer();
+            
+            // Close modal
+            settingsModal.style.display = 'none';
+            
+            showToast('Settings saved');
+        }
+        
+        // Clear all stored data
+        function clearAllData() {
+            if (confirm('Are you sure you want to clear all station data? This will reset all custom settings and history.')) {
+                Cookies.remove('stations');
+                showToast('All station data cleared');
+                loadStations();
+            }
+        }
+        
+        // Show add station modal
+        function showAddStationModal() {
+            document.getElementById('station-modal-title').textContent = 'Add Station';
+            document.getElementById('station-id-hidden').value = '';
+            document.getElementById('station-id').value = '';
+            document.getElementById('station-id').disabled = false;
+            document.getElementById('station-name').value = '';
+            document.getElementById('station-lat').value = '';
+            document.getElementById('station-lng').value = '';
+            
+            if (locationMarker) {
+                locationPickerMap.removeLayer(locationMarker);
+                locationMarker = null;
+            }
+            
+            locationPickerMap.setView([DEFAULT_CENTER.lat, DEFAULT_CENTER.lng], 8);
+            setTimeout(() => locationPickerMap.invalidateSize(), 100);
+            
+            stationModal.style.display = 'flex';
+        }
+        
+        // Show edit station modal
+        function showEditStationModal(stationId) {
+            const station = stations.find(s => s.id === stationId);
+            if (!station) return;
+            
+            document.getElementById('station-modal-title').textContent = 'Edit Station';
+            document.getElementById('station-id-hidden').value = stationId;
+            document.getElementById('station-id').value = stationId;
+            document.getElementById('station-id').disabled = true;
+            document.getElementById('station-name').value = station.name || '';
+            document.getElementById('station-lat').value = station.lat || '';
+            document.getElementById('station-lng').value = station.lng || '';
+            
+            editingStationId = stationId;
+            
+            if (locationMarker) {
+                locationPickerMap.removeLayer(locationMarker);
+                locationMarker = null;
+            }
+            
+            if (station.lat && station.lng) {
+                locationPickerMap.setView([station.lat, station.lng], 10);
+                locationMarker = L.marker([station.lat, station.lng]).addTo(locationPickerMap);
+            } else {
+                locationPickerMap.setView([DEFAULT_CENTER.lat, DEFAULT_CENTER.lng], 8);
+            }
+            
+            setTimeout(() => locationPickerMap.invalidateSize(), 100);
+            
+            stationModal.style.display = 'flex';
+        }
+        
+        // Save station
+        function saveStation() {
+            const hiddenIdField = document.getElementById('station-id-hidden').value;
+            const isEdit = !!hiddenIdField;
+            
+            const stationId = isEdit ? hiddenIdField : document.getElementById('station-id').value.trim();
+            const stationName = document.getElementById('station-name').value.trim();
+            const lat = parseFloat(document.getElementById('station-lat').value);
+            const lng = parseFloat(document.getElementById('station-lng').value);
+            
+            if (!stationId) {
+                showToast('Station ID is required', 'error');
+                return;
+            }
+            
+            if (isEdit) {
+                // Update existing station
+                const stationIndex = stations.findIndex(s => s.id === stationId);
+                if (stationIndex !== -1) {
+                    stations[stationIndex].name = stationName || formatStationName(stationId);
+                    
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        stations[stationIndex].lat = lat;
+                        stations[stationIndex].lng = lng;
+                    }
+                    
+                    showToast('Station updated');
+                }
+            } else {
+                // Check if station already exists
+                if (stations.some(s => s.id === stationId)) {
+                    showToast('Station ID already exists', 'error');
+                    return;
+                }
+                
+                // Add new station
+                const newStation = {
+                    id: stationId,
+                    name: stationName || formatStationName(stationId),
+                    status: 'unknown',
+                    lastUpdate: null,
+                    lat: isNaN(lat) ? null : lat,
+                    lng: isNaN(lng) ? null : lng,
+                    uptime: 0,
+                    statusHistory: []
+                };
+                
+                stations.push(newStation);
+                showToast('Station added');
+            }
+            
+            // Save to cookies
+            saveStationsToCookies();
+            
+            // Update UI
+            renderStations();
+            checkStationStatus(stations.find(s => s.id === stationId));
+            
+            // Close modal
+            stationModal.style.display = 'none';
+            editingStationId = null;
+            
+            if (locationMarker) {
+                locationPickerMap.removeLayer(locationMarker);
+                locationMarker = null;
+            }
+        }
+        
+        // Delete station
+        function deleteStation(stationId) {
+            if (confirm(`Are you sure you want to delete station ${stationId}?`)) {
+                stations = stations.filter(s => s.id !== stationId);
+                
+                // Save to cookies
+                saveStationsToCookies();
+                
+                // Update UI
+                renderStations();
+                showToast('Station deleted');
+            }
+        }
+        
+        // Save stations data to cookies
+        function saveStationsToCookies() {
+            // Create a simplified object with just the custom/saved data
+            const stationsData = {};
+            
+            stations.forEach(station => {
+                stationsData[station.id] = {
+                    lat: station.lat,
+                    lng: station.lng,
+                    uptime: station.uptime,
+                    statusHistory: station.statusHistory,
+                };
+            });
+            
+            Cookies.set('stations', JSON.stringify(stationsData), { expires: 365 });
+        }
+        
+        // Show card view
+        function showCardView() {
+            cardView.style.display = 'grid';
+            mapView.style.display = 'none';
+            loadingContainer.style.display = 'none';
+            
+            cardViewBtn.classList.add('bg-indigo-600', 'text-white');
+            cardViewBtn.classList.remove('bg-white', 'text-gray-700');
+            
+            mapViewBtn.classList.add('bg-white', 'text-gray-700');
+            mapViewBtn.classList.remove('bg-indigo-600', 'text-white');
+        }
+        
+        // Show map view
+        function showMapView() {
+            cardView.style.display = 'none';
+            mapView.style.display = 'block';
+            loadingContainer.style.display = 'none';
+            
+            mapViewBtn.classList.add('bg-indigo-600', 'text-white');
+            mapViewBtn.classList.remove('bg-white', 'text-gray-700');
+            
+            cardViewBtn.classList.add('bg-white', 'text-gray-700');
+            cardViewBtn.classList.remove('bg-indigo-600', 'text-white');
+            
+            // Need to invalidate size when showing map
+            setTimeout(() => map.invalidateSize(), 100);
+            
+            // Fit map to markers if stations have coordinates
+            const stationsWithCoords = stations.filter(s => s.lat && s.lng);
+            if (stationsWithCoords.length > 0) {
+                const bounds = L.latLngBounds(stationsWithCoords.map(s => [s.lat, s.lng]));
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
+        
+        // Render stations to UI
+        function renderStations() {
+            // Hide loading container
+            loadingContainer.style.display = 'none';
+            
+            // Clear existing cards
+            cardView.innerHTML = '';
+            
+            // Sort stations alphabetically
+            const sortedStations = [...stations].sort((a, b) => a.id.localeCompare(b.id));
+            
+            // Render station cards
+            sortedStations.forEach(station => {
+                const card = createStationCard(station);
+                cardView.appendChild(card);
+            });
+            
+            // Update map markers
+            updateMapMarkers();
+        }
+        
+        // Create station card
+        function createStationCard(station) {
+            const card = document.createElement('div');
+            card.className = 'station-card bg-white shadow rounded-lg overflow-hidden';
+            
+            let statusClass = 'status-unknown';
+            if (station.status === 'online') {
+                statusClass = 'status-online';
+            } else if (station.status === 'offline') {
+                statusClass = 'status-offline';
+            }
+            
+            let uptimeClass = 'text-gray-600';
+            if (station.uptime >= 90) {
+                uptimeClass = 'uptime-high';
+            } else if (station.uptime >= 70) {
+                uptimeClass = 'uptime-medium';
+            } else if (station.uptime > 0) {
+                uptimeClass = 'uptime-low';
+            }
+            
+            const lastUpdateText = station.lastUpdate 
+                ? new Date(station.lastUpdate).toLocaleTimeString() 
+                : 'Never';
+            
+            card.innerHTML = `
+                <div class="px-4 py-5 sm:p-6">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900">${station.name}</h3>
+                            <p class="text-sm text-gray-500">${station.id}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button class="edit-station text-gray-400 hover:text-gray-500" data-station="${station.id}">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-station text-gray-400 hover:text-red-500" data-station="${station.id}">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <span class="status-badge ${statusClass}"></span>
+                            <span class="text-sm font-medium ${station.status === 'online' ? 'text-green-700' : station.status === 'offline' ? 'text-red-700' : 'text-gray-500'}">
+                                ${station.status === 'online' ? 'Online' : station.status === 'offline' ? 'Offline' : 'Unknown'}
+                            </span>
+                        </div>
+                        <div class="text-sm ${uptimeClass} font-medium">
+                            Uptime: ${station.uptime}%
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 grid grid-cols-2 gap-1 text-xs text-gray-500">
+                        <div>Last check: ${lastUpdateText}</div>
+                        <div>Format: ${station.format || 'N/A'}</div>
+                        <div>Location: ${station.lat && station.lng ? `${station.lat.toFixed(4)}, ${station.lng.toFixed(4)}` : 'Unknown'}</div>
+                        <div>Network: ${station.network || 'N/A'}</div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <button class="check-station w-full px-3 py-1.5 text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none" data-station="${station.id}">
+                            <i class="fas fa-sync-alt mr-1"></i> Check Status
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Add event listeners
+            card.querySelector('.edit-station').addEventListener('click', () => {
+                showEditStationModal(station.id);
+            });
+            
+            card.querySelector('.delete-station').addEventListener('click', () => {
+                deleteStation(station.id);
+            });
+            
+            card.querySelector('.check-station').addEventListener('click', () => {
+                checkStationStatus(station);
+            });
+            
+            return card;
+        }
+        
+        // Update map markers
+        function updateMapMarkers() {
+            // Clear existing markers
+            map.eachLayer((layer) => {
+                if (layer instanceof L.Marker) {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            // Add markers for stations with coordinates
+            stations.forEach(station => {
+                if (station.lat && station.lng) {
+                    const markerColor = station.status === 'online' ? 'green' : 
+                                      station.status === 'offline' ? 'red' : 'gray';
+                    
+                    const marker = L.marker([station.lat, station.lng]).addTo(map);
+                    
+                    // Add popup with station info
+                    const uptimeClass = station.uptime >= 90 ? 'text-green-600' : 
+                                       station.uptime >= 70 ? 'text-yellow-600' : 'text-red-600';
+                    
+                    const popupContent = `
+                        <div class="station-popup">
+                            <h3 class="font-medium text-gray-900">${station.name}</h3>
+                            <p class="text-sm text-gray-500">${station.id}</p>
+                            <div class="mt-2 grid grid-cols-2 gap-x-2 gap-y-1 text-sm">
+                                <div class="font-medium">Status:</div>
+                                <div class="${station.status === 'online' ? 'text-green-600' : station.status === 'offline' ? 'text-red-600' : 'text-gray-500'}">
+                                    ${station.status === 'online' ? 'Online' : station.status === 'offline' ? 'Offline' : 'Unknown'}
+                                </div>
+                                <div class="font-medium">Uptime:</div>
+                                <div class="${uptimeClass}">${station.uptime}%</div>
+                                <div class="font-medium">Format:</div>
+                                <div>${station.format || 'N/A'}</div>
+                                <div class="font-medium">Network:</div>
+                                <div>${station.network || 'N/A'}</div>
+                            </div>
+                            <div class="mt-2 text-xs text-gray-500">
+                                Last check: ${station.lastUpdate ? new Date(station.lastUpdate).toLocaleTimeString() : 'Never'}
+                            </div>
+                        </div>
+                    `;
+                    
+                    marker.bindPopup(popupContent);
+                }
+            });
+        }
+        
+        // Start the status update timer
+        function startUpdateTimer() {
+            updateTimer = setInterval(() => {
+                checkAllStationsStatus();
+            }, updateInterval);
+        }
+        
+        // Check all stations status
+        async function checkAllStationsStatus() {
+            if (stations.length === 0) {
+                showToast('No stations to check');
+                return;
+            }
+            
+            showToast('Checking all stations...');
+            
+            for (const station of stations) {
+                await checkStationStatus(station);
+            }
+            
+            // Update last check time
+            const now = new Date();
+            lastUpdateEl.textContent = `Last update: ${now.toLocaleTimeString()}`;
+            
+            // Save to cookies
+            saveStationsToCookies();
+            
+            showToast('All stations checked');
+        }
+        
+        // Check status of a single station
+        async function checkStationStatus(station) {
+            if (!station) return false;
+            
+            try {
+                // Simulate checking with the API - in a real implementation,
+                // you would make a proper request to check the actual status
+                const isOnline = Math.random() > 0.3; // 70% chance of being online for simulation
+                
+                // Update station status
+                station.status = isOnline ? 'online' : 'offline';
+                station.lastUpdate = Date.now();
+                
+                // Update uptime calculation
+                updateStationUptime(station, isOnline);
+                
+                // Update UI
+                renderStations();
+                
+                return isOnline;
+            } catch (error) {
+                console.error(`Error checking status for ${station.id}:`, error);
+                
+                // Update as offline on error
+                station.status = 'offline';
+                station.lastUpdate = Date.now();
+                updateStationUptime(station, false);
+                
+                // Update UI
+                renderStations();
+                
+                return false;
+            }
+        }
+        
+        // Update station uptime percentage
+        function updateStationUptime(station, isOnline) {
+            // Initialize history if it doesn't exist
+            if (!Array.isArray(station.statusHistory)) {
+                station.statusHistory = [];
+            }
+            
+            // Add current status to history
+            station.statusHistory.push({
+                timestamp: Date.now(),
+                status: isOnline ? 'online' : 'offline'
+            });
+            
+            // Limit history size (keep last 100 entries)
+            if (station.statusHistory.length > 100) {
+                station.statusHistory.shift();
+            }
+            
+            // Calculate uptime percentage
+            const totalChecks = station.statusHistory.length;
+            const successfulChecks = station.statusHistory.filter(entry => entry.status === 'online').length;
+            station.uptime = totalChecks > 0 ? Math.round((successfulChecks / totalChecks) * 100) : 0;
+            
+            return station.uptime;
+        }
+        
+        // Show toast notification
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            
+            // Set message and style
+            toastMessage.textContent = message;
+            
+            // Set background color based on type
+            if (type === 'error') {
+                toast.classList.add('bg-red-600');
+                toast.classList.remove('bg-gray-900', 'bg-green-600');
+            } else if (type === 'success') {
+                toast.classList.add('bg-green-600');
+                toast.classList.remove('bg-gray-900', 'bg-red-600');
+            } else {
+                toast.classList.add('bg-gray-900');
+                toast.classList.remove('bg-red-600', 'bg-green-600');
+            }
+            
+            // Show toast
+            toast.classList.remove('opacity-0', 'translate-y-2');
+            toast.classList.add('opacity-100', 'translate-y-0');
+            
+            // Hide toast after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-2');
+            }, 3000);
+        }
+    </script>
+
+
+    <script id="html_badge_script1">
+        window.__genspark_remove_badge_link = "https://www.genspark.ai/api/html_badge/" +
+            "remove_badge?token=To%2FBnjzloZ3UfQdcSaYfDt1FK23lX7%2BrHM7JZB06vuhPmG6EhTB86wPBzy2WV0B9N3uEr67i%2FW6Olt%2BFTvCdKBHOHboaseLWEXrJV9zIHJaxgIqmOQ%2F4A20R60pSx40AcaOPWGZsASvmipXAtZKNp980NGGoWExuNOqKiv05BdQ3%2BVOkjVMd0sYLADnMQaOScir%2BhVsHczyYkDYBQvq4I4SSAFoGccA1sK6lbQHFHrlBDzvvRG7pzxvnnHJMs3tHnpx%2B9NGcsM8Lg2pZTvNeuRVABLSqU3yfL702pbymZ9VK9%2BKk9G6Fkfnst6o%2BR30qsP6ZoRXIJ8R3R8DgQR%2FdiIduxqbHlacuFJraBNUbuW0zneJBLkZ64dIIFYblUOp5b82iwXVT%2FsIgTrMuUwZLLDAlaHvR%2BD%2B0U13RqBRRBVvrTmDd2l9G%2BjOHCb23c%2BUvfLYkYgqlT9kYrBoxRztMBH3rJyE7%2Bdud9ZlNsej8QQk5X08eh7FYyW%2FpPhF825GEG7wDToE3XNPKgTj9lECzPNPCCrit%2Bc66j%2FexPMi7ZPgQhNJ7UNv7BxpYWvPMgpb3ytIc2CGjWJQ9kcWSZrrPuQ%3D%3D";
+        window.__genspark_locale = "en-US";
+        window.__genspark_token = "To/BnjzloZ3UfQdcSaYfDt1FK23lX7+rHM7JZB06vuhPmG6EhTB86wPBzy2WV0B9N3uEr67i/W6Olt+FTvCdKBHOHboaseLWEXrJV9zIHJaxgIqmOQ/4A20R60pSx40AcaOPWGZsASvmipXAtZKNp980NGGoWExuNOqKiv05BdQ3+VOkjVMd0sYLADnMQaOScir+hVsHczyYkDYBQvq4I4SSAFoGccA1sK6lbQHFHrlBDzvvRG7pzxvnnHJMs3tHnpx+9NGcsM8Lg2pZTvNeuRVABLSqU3yfL702pbymZ9VK9+Kk9G6Fkfnst6o+R30qsP6ZoRXIJ8R3R8DgQR/diIduxqbHlacuFJraBNUbuW0zneJBLkZ64dIIFYblUOp5b82iwXVT/sIgTrMuUwZLLDAlaHvR+D+0U13RqBRRBVvrTmDd2l9G+jOHCb23c+UvfLYkYgqlT9kYrBoxRztMBH3rJyE7+dud9ZlNsej8QQk5X08eh7FYyW/pPhF825GEG7wDToE3XNPKgTj9lECzPNPCCrit+c66j/exPMi7ZPgQhNJ7UNv7BxpYWvPMgpb3ytIc2CGjWJQ9kcWSZrrPuQ==";
+    </script>
+    <scribe-shadow id="crxjs-ext" style="position: fixed; width: 0px; height: 0px; top: 0px; left: 0px; z-index: 2147483647; overflow: visible; visibility: visible;"><template shadowrootmode="open"><div id="root-scribe-elem" style="position: fixed; width: 0px; height: 0px; top: 0px; left: 0px; overflow: visible; color: rgb(15, 23, 42);"><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed bottom-auto right-0 top-0 z-[999999] flex max-h-screen w-[400px] max-w-full p-4"></ol></div></div><link rel="stylesheet" href="chrome-extension://okfkdaglfjjjfefdcppliegebpoegaii/assets/style.css"></template></scribe-shadow></body></html>
